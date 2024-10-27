@@ -1,257 +1,655 @@
-import time
+import json
+
 import pygame as pg
 import random
 
+# Инициализация pg
 pg.init()
-pg.mixer.init()
 
-# константы
-# здесь записан порядок нот и их длительность для каждой песни
-SIZE = (400, 600)
+# Размеры окна
+SCREEN_WIDTH = 900
+SCREEN_HEIGHT = 550
 
-CHRISTMAS_TREE_NOTES = ["c4", "a4", "a4", "g4", "a4", "f4", "c4", "c4", "c4", "a4", "a4", "a-4", "g4", "c5",
-                        "c5", "d4", "d4", "a-4", "a-4", "a4", "g4", "f4", "c4", "a4", "a4", "g4", "a4", "f4"]
-CHRISTMAS_TREE_DURATION = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2,
-                           1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]
+ICON_SIZE = 80
+PADDING = 5
 
-BIRCH_NOTES = ["a4", "a4", "a4", "a4", "g4", "f4", "f4", "e4", "d4",
-               "a4", "a4", "c5", "a4", "g4", "g4", "f4", "f4", "e4", "d4",
-               "e4", "f4", "g4", "f4", "f4", "e4", "d4",
-               "e4", "f4", "g4", "f4", "f4", "e4", "d4"]
-BIRCH_DURATION = [1, 1, 1, 1, 2, 1, 1, 2, 2,
-                  1, 1, 1, 1, 1, 1, 1, 1, 2, 2,
-                  2, 1, 2, 1, 1, 2, 2,
-                  2, 1, 2, 1, 1, 2, 2]
+DOG_WIDTH = 310
+DOG_HEIGHT = 500
 
-MORNING_NOTES = ["c5", "a4", "g4", "f4", "g4", "a4", "c5", "a4", "f4", "g4", "a4", "g4", "a4", "c5", "a4",
-                 "c5", "d5", "a4", "d5", "c5", "a4", "f4", "c4", "a3", "g3", "f3", ]
-MORNING_DURATION = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2]
+DOG_Y = 100
+
+BUTTON_WIDTH = 200
+BUTTON_HEIGHT = 60
+
+FOOD_SIZE = 200
+TOY_SIZE = 100
+
+MENU_NAV_XPAD = 90
+MENU_NAV_YPAD = 130
+
+FPS = 60
+
+font = pg.font.Font(None, 40)
+font_mini = pg.font.Font(None, 15)
+font_maxi = pg.font.Font(None, 200)
 
 
-class Tile(pg.sprite.Sprite):
-    # загрузка всех картинок для плиток
-    short_tile = pg.image.load("short_tile.png")
-    short_tile = pg.transform.scale(short_tile, (SIZE[0] // 4, SIZE[1] // 3.5))
-    short_tile_pressed = pg.image.load("short_tile_pressed.png")
-    short_tile_pressed = pg.transform.scale(short_tile_pressed, (SIZE[0] // 4, SIZE[1] // 3.5))
+def load_image(file, width, height):
+    image = pg.image.load(file).convert_alpha()
+    image = pg.transform.scale(image, (width, height))
+    return image
 
-    long_tile = pg.image.load("long_tile.png")
-    long_tile = pg.transform.scale(long_tile, (SIZE[0] // 4, SIZE[1] // 2.2))
-    long_tile_pressed = pg.image.load("long_tile_pressed.png")
-    long_tile_pressed = pg.transform.scale(long_tile_pressed, (SIZE[0] // 4, SIZE[1] // 2.2))
 
-    def __init__(self, long=False):
-        '''
-        Класс плитки может создавать их двух разных размеров: короткие и длинные.
-        Если нужно создать длинную плитку, параметр long должен иметь значение True. По умолчанию плитки короткие.
+def text_render(text):
+    return font.render(str(text), True, "black")
 
-        Длинная плитка имеет дополнительную переменную count - это сколько тиков уже прошло до того,
-        как она посчитается сыгранной. Пока это время не прошло, длинную плитку нужно зажимать мышкой.
-        '''
-        super().__init__()
 
-        if long:
-            self.long = True
-            self.image = Tile.long_tile
-            self.count = 0
-        else:
-            self.long = False
-            self.image = Tile.short_tile
+class Item:
+    def __init__(self, name, price, file, is_using, is_bought):
+        self.name = name
+        self.price = price
+        self.file = file
+        self.image = load_image(file, DOG_WIDTH // 1.7, DOG_HEIGHT // 1.7)
+        self.is_using = is_using
+        self.is_bought = is_bought
 
-        self.rect = self.image.get_rect()
-        self.rect.x = random.randint(0, 3) * SIZE[0] // 4  # создаём плитку на случайной дорожке
-        self.rect.y = -SIZE[1]
+        self.full_image = load_image(file, DOG_WIDTH, DOG_HEIGHT)
 
-        # если плитка соприкосается с другими плитками, переставить её на свободную дорожку
-        while pg.sprite.spritecollide(self, screen_notes, False):
-            self.rect.x = random.randint(0, 3) * SIZE[0] // 4
 
-        self.played = False
+class ClothesMenu:
+    def __init__(self, game, data):
+        self.game = game
+        self.menu_page = load_image("images/menu/menu_page.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        self.bottom_label_off = load_image("images/menu/bottom_label_off.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.bottom_label_on = load_image("images/menu/bottom_label_on.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.top_label_off = load_image("images/menu/top_label_off.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.top_label_on = load_image("images/menu/top_label_on.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        self.items = []
+        for item in data:
+            self.items.append(Item(*item.values()))
+
+        self.current_item = 0
+
+        self.item_rect = self.items[0].image.get_rect()
+        self.item_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+
+        self.next_button = Button("Вперёд", SCREEN_WIDTH - MENU_NAV_XPAD - BUTTON_WIDTH, SCREEN_HEIGHT - MENU_NAV_YPAD,
+                                  width=int(BUTTON_WIDTH // 1.2), height=int(BUTTON_HEIGHT // 1.2), func=self.to_next)
+
+        self.previous_button = Button("Назад", MENU_NAV_XPAD + 30, SCREEN_HEIGHT - MENU_NAV_YPAD,
+                                      width=int(BUTTON_WIDTH // 1.2), height=int(BUTTON_HEIGHT // 1.2),
+                                      func=self.to_previous)
+
+        self.use_button = Button("Надеть", MENU_NAV_XPAD + 30, SCREEN_HEIGHT - MENU_NAV_YPAD - 50 - PADDING,
+                                 width=int(BUTTON_WIDTH // 1.2), height=int(BUTTON_HEIGHT // 1.2),
+                                 func=self.use_item)
+
+        self.buy_button = Button("Купить", SCREEN_WIDTH // 2 - int(BUTTON_WIDTH // 1.5) // 2,
+                                 SCREEN_HEIGHT // 2 + 95,
+                                 width=int(BUTTON_WIDTH // 1.5), height=int(BUTTON_HEIGHT // 1.5),
+                                 func=self.buy)
+
+        self.price_text = text_render(self.items[self.current_item].price)
+        self.price_text_rect = self.price_text.get_rect()
+        self.price_text_rect.center = (SCREEN_WIDTH // 2, 180)
+
+        self.name_text = text_render(self.items[self.current_item].name)
+        self.name_text_rect = self.name_text.get_rect()
+        self.name_text_rect.center = (SCREEN_WIDTH // 2, 120)
+
+        self.use_text = text_render("Надето")
+        self.use_text_rect = self.use_text.get_rect()
+        self.use_text_rect.midright = (SCREEN_WIDTH - 150, 130)
+
+        self.buy_text = text_render("Куплено")
+        self.buy_text_rect = self.buy_text.get_rect()
+        self.buy_text_rect.midright = (SCREEN_WIDTH - 140, 200)
 
     def update(self):
-        self.rect.y += 1
+        self.next_button.update()
+        self.previous_button.update()
+        self.use_button.update()
+        self.buy_button.update()
 
-        # ставим длинные плитки в начальный цвет, чтобы если их перестали нажимать слишком рано,
-        # они не застыли в нажатом положении
-        if self.long and self.count > 0 and not self.played:
-            self.image = Tile.long_tile
+    def is_clicked(self, event):
+        self.next_button.is_clicked(event)
+        self.previous_button.is_clicked(event)
+        self.use_button.is_clicked(event)
+        self.buy_button.is_clicked(event)
 
-        mouse_pos = pg.mouse.get_pos()
+    def to_next(self):
+        if self.current_item != len(self.items) - 1:
+            self.current_item += 1
 
-        if pg.mouse.get_pressed()[0]:
-            if self.rect.collidepoint(mouse_pos):
-                self.press()
+        self.price_text = text_render(self.items[self.current_item].price)
+        self.price_text_rect = self.price_text.get_rect()
+        self.price_text_rect.center = (SCREEN_WIDTH // 2, 180)
 
-        if self.rect.y >= SIZE[1]:  # если плитка за пределами окна, она удаляется
-            self.kill()
+        self.name_text = text_render(self.items[self.current_item].name)
+        self.name_text_rect = self.name_text.get_rect()
+        self.name_text_rect.center = (SCREEN_WIDTH // 2, 120)
 
-    def press(self):
-        # нота плитки проигрывается если
-        # 1. она на была проиграна раньше
-        # 2. это длинная плитка и она ещё не отыграла ни одного тика
-        # 3. это короткая плитка
-        if not self.played:
-            if self.long and self.count == 0:
-                play_note()
-            if not self.long:
-                play_note()
+    def to_previous(self):
+        if self.current_item != 0:
+            self.current_item -= 1
 
-        if self.long:
-            # каждые несколько тиков при нажатии на длинную плитку её цвет меняется
-            # когда нужное количество тиков пройдёт, то она навсегда поменяет цвет
-            # и будет считаться нажатой
+        self.price_text = text_render(self.items[self.current_item].price)
+        self.price_text_rect = self.price_text.get_rect()
+        self.price_text_rect.center = (SCREEN_WIDTH // 2, 180)
 
-            self.count += 1
-            if self.count % 5 == 0 and self.count * 2 < 255:
-                self.image = Tile.long_tile_pressed
-            else:
-                self.image = Tile.long_tile
-            if self.count >= 120:
-                self.image = Tile.long_tile_pressed
-                self.played = True
+        self.name_text = text_render(self.items[self.current_item].name)
+        self.name_text_rect = self.name_text.get_rect()
+        self.name_text_rect.center = (SCREEN_WIDTH // 2, 120)
+
+    def use_item(self):
+        self.items[self.current_item].is_using = not self.items[self.current_item].is_using
+        print(self.items[self.current_item].is_using)
+
+    def buy(self):
+        if self.game.money >= self.items[self.current_item].price:
+            self.game.money -= self.items[self.current_item].price
+            self.items[self.current_item].is_bought = True
+
+    def draw(self, screen):
+        screen.blit(self.menu_page, (0, 0))
+
+        screen.blit(self.items[self.current_item].image, self.item_rect)
+
+        if self.items[self.current_item].is_bought:
+            screen.blit(self.bottom_label_on, (0, 0))
         else:
-            # короткие плитки сразу меняют цвет и считаются сыгранными
-            self.image = Tile.short_tile_pressed
-            self.played = True
+            screen.blit(self.bottom_label_off, (0, 0))
+        if self.items[self.current_item].is_using:
+            screen.blit(self.top_label_on, (0, 0))
+        else:
+            screen.blit(self.top_label_off, (0, 0))
+        self.next_button.draw(screen)
+        self.previous_button.draw(screen)
+        self.use_button.draw(screen)
+        self.buy_button.draw(screen)
+
+        screen.blit(self.price_text, self.price_text_rect)
+        screen.blit(self.name_text, self.name_text_rect)
+        screen.blit(self.use_text, self.use_text_rect)
+        screen.blit(self.buy_text, self.buy_text_rect)
 
 
-class Song:
-    songs = []  # здесь будет хранится список всех доступных песен
-
-    def __init__(self, name, notes, duration, rect, interval=0.5):
+class Food:
+    def __init__(self, name, price, file, satiety, medicine_power=0):
         self.name = name
-        self.notes = notes
-        self.duration = duration
-        self.color = "red"
-        self.rect = pg.Rect(rect)
-        self.interval = interval
-
-        self.text = f1.render(self.name, True, pg.Color("white"))
-        Song.songs.append(self)
+        self.price = price
+        self.satiety = satiety
+        self.medicine_power = medicine_power
+        self.image = load_image(file, FOOD_SIZE, FOOD_SIZE)
 
 
-screen = pg.display.set_mode(SIZE)
+class FoodMenu:
+    def __init__(self, game):
+        self.game = game
+        self.menu_page = load_image("images/menu/menu_page.png", SCREEN_WIDTH, SCREEN_HEIGHT)
 
-fps = 500
-clock = pg.time.Clock()
+        self.bottom_label_off = load_image("images/menu/bottom_label_off.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.bottom_label_on = load_image("images/menu/bottom_label_on.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.top_label_off = load_image("images/menu/top_label_off.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.top_label_on = load_image("images/menu/top_label_on.png", SCREEN_WIDTH, SCREEN_HEIGHT)
 
-next_note = 0  # номер ноты, которую нужно сыграть следующей
-sound = None  # звук, который сейчас играет
+        self.items = [Food("Мясо", 30, "images/food/meat.png", 10),
+                      Food("Корм", 40, "images/food/dog food.png", 15),
+                      Food("Элитный корм", 100, "images/food/dog food elite.png", 25, medicine_power=2),
+                      Food("Лекарство", 200, "images/food/medicine.png", 0, medicine_power=10)]
 
-pg.mixer.music.set_volume(0.3)
+        self.current_item = 0
+
+        self.item_rect = self.items[0].image.get_rect()
+        self.item_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+
+        self.next_button = Button("Вперёд", SCREEN_WIDTH - MENU_NAV_XPAD - BUTTON_WIDTH, SCREEN_HEIGHT - MENU_NAV_YPAD,
+                                  width=int(BUTTON_WIDTH // 1.2), height=int(BUTTON_HEIGHT // 1.2), func=self.to_next)
+
+        self.previous_button = Button("Назад", MENU_NAV_XPAD + 30, SCREEN_HEIGHT - MENU_NAV_YPAD,
+                                      width=int(BUTTON_WIDTH // 1.2), height=int(BUTTON_HEIGHT // 1.2),
+                                      func=self.to_previous)
+
+        self.buy_button = Button("Съесть", SCREEN_WIDTH // 2 - int(BUTTON_WIDTH // 1.5) // 2,
+                                 SCREEN_HEIGHT // 2 + 95,
+                                 width=int(BUTTON_WIDTH // 1.5), height=int(BUTTON_HEIGHT // 1.5),
+                                 func=self.buy_and_eat)
+
+        self.price_text = text_render(self.items[self.current_item].price)
+        self.price_text_rect = self.price_text.get_rect()
+        self.price_text_rect.center = (SCREEN_WIDTH // 2, 180)
+
+        self.name_text = text_render(self.items[self.current_item].name)
+        self.name_text_rect = self.name_text.get_rect()
+        self.name_text_rect.center = (SCREEN_WIDTH // 2, 120)
+
+    def update(self):
+        self.next_button.update()
+        self.previous_button.update()
+        self.buy_button.update()
+
+    def is_clicked(self, event):
+        self.next_button.is_clicked(event)
+        self.previous_button.is_clicked(event)
+        self.buy_button.is_clicked(event)
+
+    def to_next(self):
+        if self.current_item != len(self.items) - 1:
+            self.current_item += 1
+
+        self.price_text = text_render(self.items[self.current_item].price)
+        self.price_text_rect = self.price_text.get_rect()
+        self.price_text_rect.center = (SCREEN_WIDTH // 2, 180)
+
+        self.name_text = text_render(self.items[self.current_item].name)
+        self.name_text_rect = self.name_text.get_rect()
+        self.name_text_rect.center = (SCREEN_WIDTH // 2, 120)
+
+    def to_previous(self):
+        if self.current_item != 0:
+            self.current_item -= 1
+
+        self.price_text = text_render(self.items[self.current_item].price)
+        self.price_text_rect = self.price_text.get_rect()
+        self.price_text_rect.center = (SCREEN_WIDTH // 2, 180)
+
+        self.name_text = text_render(self.items[self.current_item].name)
+        self.name_text_rect = self.name_text.get_rect()
+        self.name_text_rect.center = (SCREEN_WIDTH // 2, 120)
+
+    def buy_and_eat(self):
+        if self.game.money >= self.items[self.current_item].price:
+            self.game.money -= self.items[self.current_item].price
+
+            self.game.satiety += self.items[self.current_item].satiety
+            if self.game.satiety > 100:
+                self.game.satiety = 100
+
+            self.game.health += self.items[self.current_item].medicine_power
+            if self.game.health > 100:
+                self.game.health = 100
+
+    def draw(self, screen):
+        screen.blit(self.menu_page, (0, 0))
+
+        screen.blit(self.items[self.current_item].image, self.item_rect)
+
+        self.next_button.draw(screen)
+        self.previous_button.draw(screen)
+        self.buy_button.draw(screen)
+
+        screen.blit(self.price_text, self.price_text_rect)
+        screen.blit(self.name_text, self.name_text_rect)
 
 
-def play_note():
-    global next_note, sound
+class Toy(pg.sprite.Sprite):
+    def __init__(self):
+        pg.sprite.Sprite.__init__(self)
 
-    if next_note > 0:
-        sound.fadeout(1000)
+        file = random.choice(["images/toys/ball.png", "images/toys/blue bone.png", "images/toys/red bone.png"])
 
-    sound = pg.mixer.Sound("Sounds/" + playing_song.notes[next_note] + ".ogg")
-    sound.play()
-    next_note += 1
+        self.image = load_image(file, TOY_SIZE, TOY_SIZE)
+        self.rect = self.image.get_rect()
+
+        self.rect.x = random.randint(MENU_NAV_XPAD, SCREEN_WIDTH - MENU_NAV_XPAD - self.image.get_width())
+        self.rect.y = 30
+
+    def update(self):
+        self.rect.y += 2
 
 
-f1 = pg.font.Font(None, 38)
+class Dog(pg.sprite.Sprite):
+    def __init__(self):
+        pg.sprite.Sprite.__init__(self)
 
-# создание песен
-song1 = Song("В лесу родилась ёлочка", CHRISTMAS_TREE_NOTES, CHRISTMAS_TREE_DURATION, (20, 100, 360, 45))
-song2 = Song("Во поле береза стояла", BIRCH_NOTES, BIRCH_DURATION, (20, 200, 360, 45), interval=0.7)
-song3 = Song("Утро", MORNING_NOTES, MORNING_DURATION, (20, 300, 360, 45))
+        self.image = load_image("images/dog.png", DOG_WIDTH // 2, DOG_HEIGHT // 2)
+        self.rect = self.image.get_rect()
 
-background_menu = pg.image.load("menu.png")
-background_menu = pg.transform.scale(background_menu, SIZE)
+        self.rect.centerx = SCREEN_WIDTH // 2
+        self.rect.centery = SCREEN_HEIGHT - MENU_NAV_YPAD - 10
 
-is_play = False
-mode = "menu"
+    def update(self):
+        keys = pg.key.get_pressed()
+        if keys[pg.K_a]:
+            self.rect.x -= 2
+        if keys[pg.K_d]:
+            self.rect.x += 2
 
-while True:
-    for event in pg.event.get():
-        if event.type == pg.QUIT:
-            quit()
-        if event.type == pg.MOUSEBUTTONDOWN:
-            # если игра не идёт, при клике переход в меню
-            if not is_play and mode == "play":
-                if event.button == 1:
-                    mode = "menu"
 
-    if mode == "menu":
-        is_play = True
+class MiniGame:
+    def __init__(self, game):
+        self.game = game
+        self.background = load_image("images/game_background.png", SCREEN_WIDTH, SCREEN_HEIGHT)
 
-        # выключить музыку при выходе в меню
-        if isinstance(sound, pg.mixer.Sound):
-            sound.stop()
+        self.dog = Dog()
 
+        self.toys = pg.sprite.Group()
+
+        self.score = 0
+
+        self.start_time = pg.time.get_ticks()
+        self.interval = 1000 * 15
+
+    def new_game(self):
+        self.dog = Dog()
+
+        self.toys = pg.sprite.Group()
+
+        self.score = 0
+
+        self.start_time = pg.time.get_ticks()
+        self.interval = 1000 * 15
+
+    def update(self):
+        if random.randint(0, 100) == 0:
+            self.toys.add(Toy())
+
+        self.dog.update()
+        self.toys.update()
+
+        hits = pg.sprite.spritecollide(self.dog, self.toys, True, pg.sprite.collide_rect_ratio(0.6))
+        self.score += len(hits)
+
+        if pg.time.get_ticks() - self.start_time > self.interval:
+            self.game.happiness += int(self.score // 2)
+            self.game.mode = "Main"
+
+    def draw(self, screen):
+        screen.blit(self.background, (0, 0))
+
+        screen.blit(self.dog.image, self.dog.rect)
+
+        screen.blit(text_render(self.score), (MENU_NAV_XPAD + 20, 80))
+
+        self.toys.draw(screen)
+
+
+class Button:
+    def __init__(self, text, x, y, width=BUTTON_WIDTH, height=BUTTON_HEIGHT, text_font=font, func=None):
+        self.func = func
+
+        self.idle_image = load_image("images/button.png", width, height)
+        self.pressed_image = load_image("images/button_clicked.png", width, height)
+        self.image = self.idle_image
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)
+
+        self.text_font = text_font
+        self.text = self.text_font.render(str(text), True, "black")
+        self.text_rect = self.text.get_rect()
+        self.text_rect.center = self.rect.center
+
+        self.is_pressed = False
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+        screen.blit(self.text, self.text_rect)
+
+    def update(self):
         mouse_pos = pg.mouse.get_pos()
-
-        for song in Song.songs:
-            if song.rect.collidepoint(mouse_pos):
-                song.color = "green"
+        if self.rect.collidepoint(mouse_pos):
+            if self.is_pressed:
+                self.image = self.pressed_image
             else:
-                song.color = "red"
+                self.image = self.idle_image
 
-        if pg.mouse.get_pressed()[0]:
-            screen_notes = pg.sprite.Group()
-            created_notes = 0
-            next_note = 0
-            timer = time.time()
+    def is_clicked(self, event):
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                self.is_pressed = True
+                self.func()
+        elif event.type == pg.MOUSEBUTTONUP and event.button == 1:
+            self.is_pressed = False
 
-            for song in Song.songs:
-                if song.rect.collidepoint(mouse_pos):
-                    playing_song = song
-                    mode = "play"
 
-        # место для отрисовки меню
-        screen.blit(background_menu, (0, 0))
+class Game:
+    def __init__(self):
 
-        y = 1
-        for song in Song.songs:
-            pg.draw.rect(screen, pg.Color(song.color), song.rect, 3)
-            screen.blit(song.text, (30, 100 * y + 5))
-            y += 1
+        # Создание окна
+        self.screen = pg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pg.display.set_caption("Виртуальный питомец")
 
-    if mode == "play":
-        if is_play:  # только если сейчас идёт игра - нет проигрыша или победы
-            if created_notes < len(playing_song.notes) and \
-                    time.time() - timer >= playing_song.interval * playing_song.duration[created_notes]:
-                if playing_song.duration[created_notes] == 1:
-                    screen_notes.add(Tile())
+        with open("save.json", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.happiness = data["happiness"]
+        self.satiety = data["satiety"]
+        self.health = data["health"]
+
+        self.money = data["money"]
+
+        self.coins_per_second = data["coins_per_second"]
+        self.costs_of_upgrade = {}
+        for key, value in data["costs_of_upgrade"].items():
+            self.costs_of_upgrade[int(key)] = value
+
+        self.items_on = []
+
+        self.mode = "Main"
+
+        # Загрузка фона
+        self.background = load_image("images/background.png", SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        # Загрузка иконок
+        self.happiness_image = load_image("images/happiness.png", ICON_SIZE, ICON_SIZE)
+        self.satiety_image = load_image("images/satiety.png", ICON_SIZE, ICON_SIZE)
+        self.health_image = load_image("images/health.png", ICON_SIZE, ICON_SIZE)
+
+        self.money_image = load_image("images/money.png", ICON_SIZE, ICON_SIZE)
+
+        # Загрузка изображений для собаки
+        self.body = load_image("images/dog.png", DOG_WIDTH, DOG_HEIGHT)
+
+        # Создание кнопок
+        button_x = SCREEN_WIDTH - BUTTON_WIDTH - PADDING
+
+        self.eat_button = Button("Еда", button_x, PADDING + ICON_SIZE, func=self.food_menu_on)
+        self.clothes_button = Button("Одежда", button_x, PADDING * 2 + ICON_SIZE + BUTTON_HEIGHT,
+                                     func=self.clothes_menu_on)
+        self.play_button = Button("Игры", button_x, PADDING * 3 + ICON_SIZE + BUTTON_HEIGHT * 2, func=self.game_on)
+
+        self.upgrade_button = Button("Улучшить", SCREEN_WIDTH - ICON_SIZE, 0,
+                                     width=BUTTON_WIDTH // 3, height=BUTTON_HEIGHT // 3,
+                                     text_font=font_mini, func=self.increase_money)
+
+        self.buttons = [self.eat_button, self.clothes_button, self.play_button, self.upgrade_button]
+
+        # Создание события для кликера
+        self.INCREASE_COINS = pg.USEREVENT + 1
+        pg.time.set_timer(self.INCREASE_COINS, 1000)
+
+        self.DECREASE = pg.USEREVENT + 2
+        pg.time.set_timer(self.DECREASE, 1000)
+
+        self.clothes_menu = ClothesMenu(self, data["clothes"])
+        self.food_menu = FoodMenu(self)
+        self.mini_game = MiniGame(self)
+
+        self.clock = pg.time.Clock()
+
+        self.run()
+
+    def clothes_menu_on(self):
+        self.mode = "Clothes menu"
+
+    def food_menu_on(self):
+        self.mode = "Food menu"
+
+    def game_on(self):
+        self.mode = "Mini game"
+        self.mini_game.new_game()
+
+    def increase_money(self):
+        for cost, check in self.costs_of_upgrade.items():
+            if not check and self.money >= cost:
+                self.coins_per_second += 1
+                self.money -= cost
+                self.costs_of_upgrade[cost] = True
+                break
+
+    def run(self):
+        while True:
+            self.event()
+            self.update()
+            self.draw()
+            self.clock.tick(FPS)
+
+    def event(self):
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                if self.mode == "Game over":
+                    data = {
+                        "happiness": 100,
+                        "satiety": 100,
+                        "health": 100,
+                        "money": 0,
+                        "coins_per_second": 1,
+                        "costs_of_upgrade": {
+                            "100": False,
+                            "1000": False,
+                            "5000": False,
+                            "10000": False
+                        },
+                        "clothes": [
+                            {
+                                "name": "Синяя футболка",
+                                "price": 10,
+                                "image": "images/items/blue t-shirt.png",
+
+                                "is_using": False,
+                                "is_bought": False
+                            },
+                            {
+                                "name": "Ботинки",
+                                "price": 50,
+                                "image": "images/items/boots.png",
+                                "is_using": False,
+                                "is_bought": False
+                            },
+                            {
+                                "name": "Шляпа",
+                                "price": 50,
+                                "image": "images/items/hat.png",
+                                "is_using": False,
+                                "is_bought": False
+                            }
+                        ]
+                    }
+
                 else:
-                    screen_notes.add(Tile(long=True))
-                timer = time.time()
-                created_notes += 1
-            screen_notes.update()
+                    data = {
+                        "happiness": self.happiness,
+                        "satiety": self.satiety,
+                        "health": self.health,
+                        "money": self.money,
+                        "coins_per_second": self.coins_per_second,
+                        "costs_of_upgrade": {
+                            "100": self.costs_of_upgrade[100],
+                            "1000": self.costs_of_upgrade[1000],
+                            "5000": self.costs_of_upgrade[5000],
+                            "10000": self.costs_of_upgrade[10000]
+                        },
+                        "clothes": []
+                    }
 
-        screen.fill(pg.Color("white"))
+                    for item in self.clothes_menu.items:
+                        data["clothes"].append({"name": item.name,
+                                                "price": item.price,
+                                                "image": item.file,
+                                                "is_using": item.is_using,
+                                                "is_bought": item.is_bought})
 
-        for i in range(4):  # отрисовка дорожек
-            pg.draw.line(screen, pg.Color("black"), (i * 100, 0), (i * 100, 600))
+                with open('save.json', 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False)
 
-        pg.draw.line(screen, pg.Color("red"), (0, 500), (400, 500), 5)
+                pg.quit()
+                exit()
+            if event.type == pg.KEYDOWN:
+                if event.key == pg.K_ESCAPE:
+                    self.mode = "Main"
 
-        screen_notes.draw(screen)
+            if event.type == self.INCREASE_COINS:
+                self.money += self.coins_per_second
 
-        # если была нажата последняя нота в песне и она сыграна до конца, то это победа
-        if next_note == len(playing_song.notes):
-            for note in screen_notes:
-                if not note.played:
-                    break
-            else:
-                text = f1.render("ПОБЕДА", True, pg.Color("green"))
-                text_rect = text.get_rect(center=(SIZE[0] // 2, SIZE[1] // 2))
-                screen.blit(text, text_rect)
-                is_play = False
+            if event.type == self.DECREASE:
+                chance = random.randint(1, 10)
+                if chance <= 5:
+                    self.satiety -= 1
+                elif 5 < chance <= 9:
+                    self.happiness -= 1
+                else:
+                    self.health -= 1
 
-        for note in screen_notes:
-            if note.rect.y > 500 and not note.played:
-                text = f1.render("ПРОИГРЫШ", True, pg.Color('red'))
-                text_rect = text.get_rect(center=(SIZE[0] // 2, SIZE[1] // 2))
-                screen.blit(text, text_rect)
-                is_play = False
+            if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                self.money += self.coins_per_second
 
-    pg.display.flip()
-    clock.tick(fps)
+            if self.mode == "Main":
+                for button in self.buttons:
+                    button.is_clicked(event)
+            elif self.mode == "Clothes menu":
+                self.clothes_menu.is_clicked(event)
+            elif self.mode == "Food menu":
+                self.food_menu.is_clicked(event)
+
+    def update(self):
+        if self.mode == "Clothes menu":
+            self.clothes_menu.update()
+        elif self.mode == "Food menu":
+            self.food_menu.update()
+        elif self.mode == "Mini game":
+            self.mini_game.update()
+        else:
+            for button in self.buttons:
+                button.update()
+
+        if self.happiness <= 0 or self.satiety <= 0 or self.health <= 0:
+            self.mode = "Game over"
+
+    def draw(self):
+        # Отрисовка интерфейса
+        self.screen.blit(self.background, (0, 0))
+
+        self.screen.blit(self.happiness_image, (PADDING, PADDING))
+        self.screen.blit(self.satiety_image, (PADDING, PADDING * 2 + ICON_SIZE))
+        self.screen.blit(self.health_image, (PADDING, PADDING * 3 + ICON_SIZE * 2))
+
+        # Упростить размещение предметов относительно других
+        self.screen.blit(text_render(self.happiness), (PADDING * 2 + ICON_SIZE, PADDING * 6))
+        self.screen.blit(text_render(self.satiety), (PADDING * 2 + ICON_SIZE, PADDING * 7 + ICON_SIZE))
+        self.screen.blit(text_render(self.health), (PADDING * 2 + ICON_SIZE, PADDING * 8 + ICON_SIZE * 2))
+
+        self.screen.blit(self.money_image, (SCREEN_WIDTH - PADDING - ICON_SIZE, PADDING))
+        self.screen.blit(text_render(self.money), (SCREEN_WIDTH - PADDING - ICON_SIZE - 40, PADDING * 6))
+
+        # Отрисовка кнопок
+        for button in self.buttons:
+            button.draw(self.screen)
+
+        # Отрисовка собаки
+        self.screen.blit(self.body, (SCREEN_WIDTH // 2 - DOG_WIDTH // 2, DOG_Y))
+
+        for item in self.clothes_menu.items:
+            if item.is_using:
+                self.screen.blit(item.full_image, (SCREEN_WIDTH // 2 - DOG_WIDTH // 2, DOG_Y))
+
+        if self.mode == "Clothes menu":
+            self.clothes_menu.draw(self.screen)
+
+        if self.mode == "Food menu":
+            self.food_menu.draw(self.screen)
+
+        if self.mode == "Mini game":
+            self.mini_game.draw(self.screen)
+
+        if self.mode == "Game over":
+            text = font_maxi.render("ПРОИГРЫШ", True, "red")
+            text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            self.screen.blit(text, text_rect)
+
+        pg.display.flip()
 
 
-
+if __name__ == "__main__":
+    Game()
